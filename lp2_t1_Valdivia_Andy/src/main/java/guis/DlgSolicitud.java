@@ -3,6 +3,7 @@ package guis;
 import java.awt.EventQueue;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.time.LocalDate;
 import java.util.List;
 
 import javax.persistence.EntityManager;
@@ -223,6 +224,7 @@ public class DlgSolicitud extends JDialog implements ActionListener {
 	}
 
 	protected void actionPerformedBtnOpciones(ActionEvent arg0) {
+		txtSalida.setText("");
 		limpiar();
 	}
 
@@ -231,6 +233,7 @@ public class DlgSolicitud extends JDialog implements ActionListener {
 	}
 
 	protected void actionPerformedBtnAdicionar(ActionEvent arg0) {
+		txtSalida.setText("");
 		tipoOperacion = ADICIONAR;
 		habilitarEntradas(true);
 		habilitarBotones(false);
@@ -238,6 +241,7 @@ public class DlgSolicitud extends JDialog implements ActionListener {
 	}
 
 	protected void actionPerformedBtnModificar(ActionEvent arg0) {
+		txtSalida.setText("");
 		tipoOperacion = MODIFICAR;
 		txtIdSolicitud.setEditable(true);
 		habilitarBotones(false);
@@ -245,6 +249,7 @@ public class DlgSolicitud extends JDialog implements ActionListener {
 	}
 
 	protected void actionPerformedBtnEliminar(ActionEvent arg0) {
+		txtSalida.setText("");
 		tipoOperacion = ELIMINAR;
 		txtIdSolicitud.setEditable(true);
 		habilitarBotones(false);
@@ -264,7 +269,7 @@ public class DlgSolicitud extends JDialog implements ActionListener {
 	void listar() {
 		EntityManagerFactory fabrica = Persistence.createEntityManagerFactory("mysqlconexion");
 		EntityManager manager = fabrica.createEntityManager();
-		String jpql = "SELECT s, a, c.descripcion FROM Solicitud s JOIN s.idActividad a JOIN a.idCategoria c";
+		String jpql = "SELECT s, a, c.descripcion FROM Solicitud s JOIN s.idActividad a JOIN a.idCategoria c order by s.idSolicitud asc";
 		try {
 			List<Object[]> resultados = manager.createQuery(jpql, Object[].class).getResultList();
 			for (Object[] objects : resultados) {
@@ -273,14 +278,14 @@ public class DlgSolicitud extends JDialog implements ActionListener {
 				String desCategoria = (String) objects[2];
 
 				imprimir("****************************************");
-				imprimir("Nro Solicitd: " + solicitud.getIdSolicitud());
-				imprimir("Fecha Registro: " + solicitud.getFecha());
-				imprimir("Actividad: " + actividad.getDescripcion());
-				imprimir("Fecha Inicio: " + actividad.getFechaInicio());
-				imprimir("Nro Vacantes: " + actividad.getNroVacantes());
-				imprimir("Categoria: " + desCategoria);
-				imprimir("Archivo adjunto: " + solicitud.getArchivoAdjunto());
-				imprimir("Estado: " + solicitud.getEstado());
+				imprimir("Nro Solicitd\t: " + solicitud.getIdSolicitud());
+				imprimir("Fecha Registro\t: " + solicitud.getFecha());
+				imprimir("Actividad\t: " + actividad.getDescripcion());
+				imprimir("Fecha Inicio\t: " + actividad.getFechaInicio());
+				imprimir("Nro Vacantes\t: " + actividad.getNroVacantes());
+				imprimir("Categoria\t: " + desCategoria);
+				imprimir("Archivo adjunto\t: " + solicitud.getArchivoAdjunto());
+				imprimir("Estado\t\t: " + solicitud.getEstado());
 			}
 		} catch (Exception e) {
 			System.out.println("error: " + e.getMessage());
@@ -305,8 +310,8 @@ public class DlgSolicitud extends JDialog implements ActionListener {
 				manager.getTransaction().commit();
 				mensaje("Solicitud registrada", "Exitosa", JOptionPane.INFORMATION_MESSAGE);
 				limpiar();
-			}else {
-				mensajeError("Debe contenerr .pdf o .docx en el archivo");
+			} else {
+				mensajeError("Debe contener .pdf o .docx en el nombre del archivo");
 			}
 		} catch (Exception e) {
 			System.err.println("Error: " + e.getMessage());
@@ -317,31 +322,79 @@ public class DlgSolicitud extends JDialog implements ActionListener {
 	}
 
 	void buscar() {
-		int id = Integer.parseInt(txtIdSolicitud.getText());
+		String codigo = txtIdSolicitud.getText();
 		EntityManagerFactory fabrica = Persistence.createEntityManagerFactory("mysqlconexion");
 		EntityManager manager = fabrica.createEntityManager();
-		try {
-			Solicitud solicitud = manager.find(Solicitud.class, id);
-			if(solicitud == null) {
-				mensajeError("No existe esa solicitud: " + id);
-				return;
+		if (codigo == null || codigo.trim().isEmpty()) {
+			mensajeError("Se debe ingresar el codigo de algun producto");
+
+		} else {
+			try {
+				int id = Integer.parseInt(codigo);
+				Solicitud solicitud = manager.find(Solicitud.class, id);
+				if (solicitud == null) {
+					mensajeError("No existe esa solicitud: " + id);
+					return;
+				}
+				txtArchivoAdjunto.setText(solicitud.getArchivoAdjunto());
+				txtFechaRegistro.setText(solicitud.getFecha() + "");
+				cboActividad.setSelectedItem(solicitud.getIdActividad());
+				cboEstado.setSelectedItem(solicitud.getEstado());
+				habilitarOk();
+			} catch (NumberFormatException e) {
+				mensajeError("Por favor, ingrese solo números en el código");
+			} finally {
+				manager.close();
 			}
-			
-			txtArchivoAdjunto.setText(solicitud.getArchivoAdjunto());
-			txtFechaRegistro.setText(solicitud.getFecha()+ "");
-			cboActividad.setSelectedItem(solicitud.getIdActividad());
-			cboEstado.setSelectedItem(solicitud.getEstado());
-		}finally {
-			manager.close();
 		}
 	}
 
 	void modificar() {
+		EntityManagerFactory fabrica = Persistence.createEntityManagerFactory("mysqlconexion");
+		EntityManager manager = fabrica.createEntityManager();
+		int codigo = Integer.parseInt(txtIdSolicitud.getText());
+		String archivo = txtArchivoAdjunto.getText();
+		Actividad actividad = (Actividad) cboActividad.getSelectedItem();
+		String estado = (String) cboEstado.getSelectedItem();
+		LocalDate fecha = LocalDate.parse(txtFechaRegistro.getText().trim());
+
+		Solicitud solicitud = new Solicitud(codigo, actividad, estado, archivo, fecha);
+		try {
+			if (archivo.contains(".pdf") || archivo.contains(".docx")) {
+				manager.getTransaction().begin();
+				manager.merge(solicitud);
+				manager.getTransaction().commit();
+				mensaje("Solicitud actualiza correctamente", "Exitosa", JOptionPane.INFORMATION_MESSAGE);
+				limpiar();
+			} else {
+				mensajeError("Debe contener .pdf o .docx en el nombre del archivo");
+			}
+		} catch (Exception e) {
+			System.err.println("Error: " + e.getMessage());
+		} finally {
+			manager.close();
+		}
 
 	}
 
 	void eliminar() {
+		EntityManagerFactory fabrica = Persistence.createEntityManagerFactory("mysqlconexion");
+		EntityManager manager = fabrica.createEntityManager();
+		int codigo = Integer.parseInt(txtIdSolicitud.getText());
 
+		try {
+			Solicitud solicitud = manager.find(Solicitud.class, codigo);	
+			manager.getTransaction().begin();
+			manager.remove(solicitud);
+			manager.getTransaction().commit();
+			mensaje("Solicitud eliminada correctamente", "Exitosa", JOptionPane.INFORMATION_MESSAGE);
+			limpiar();
+
+		} catch (Exception e) {
+			System.err.println("Error: " + e.getMessage());
+		} finally {
+			manager.close();
+		}
 	}
 
 	// M�todos tipo void (con par�metros)
